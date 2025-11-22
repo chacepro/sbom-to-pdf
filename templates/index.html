@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JSON to PDF Converter</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/styles.css') }}"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <h1>JSON to PDF Converter</h1>
+      <form id="upload-form" enctype="multipart/form-data">
+        <label for="json-file">Upload JSON File:</label>
+        <input
+          type="file"
+          id="json-file"
+          name="json_file"
+          accept=".json"
+          required
+        />
+        <button type="submit">Process and Download PDF</button>
+      </form>
+      <div id="message"></div>
+    </div>
+    <script>
+      document
+        .getElementById("upload-form")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const formData = new FormData();
+          const fileInput = document.getElementById("json-file");
+          formData.append("json_file", fileInput.files[0]);
+
+          const messageDiv = document.getElementById("message");
+          messageDiv.textContent = "Processing...";
+
+          try {
+            const response = await fetch("/process", {
+              method: "POST",
+              body: formData,
+            });
+
+            if (response.ok) {
+              // Validate content type to ensure it's a PDF before processing
+              const contentType = response.headers.get("content-type") || "";
+              const expectedType = "application/pdf";
+              if (!contentType.includes(expectedType)) {
+                throw new Error("Invalid response type: expected PDF");
+              }
+
+              const blob = await response.blob();
+
+              // Validate blob type matches expected PDF type
+              const blobType = blob.type || "";
+              if (!blobType.includes(expectedType)) {
+                throw new Error("Invalid blob type: expected PDF");
+              }
+
+              // Create blob URL - blob URLs are safe as they're browser-generated, not user input
+              const blobUrl = window.URL.createObjectURL(blob);
+
+              // Use a safe, hardcoded filename (not from user input)
+              const safeFilename = "sbom_document.pdf";
+
+              // Create temporary anchor element for download
+              const downloadLink = document.createElement("a");
+              downloadLink.setAttribute("href", blobUrl);
+              downloadLink.setAttribute("download", safeFilename);
+              downloadLink.setAttribute("style", "display: none;");
+
+              // Trigger download and clean up
+              document.body.appendChild(downloadLink);
+              downloadLink.click();
+
+              // Clean up DOM and blob URL
+              setTimeout(() => {
+                if (downloadLink.parentNode) {
+                  downloadLink.parentNode.removeChild(downloadLink);
+                }
+                window.URL.revokeObjectURL(blobUrl);
+              }, 100);
+
+              messageDiv.textContent = "PDF generated successfully!";
+            } else {
+              const errorText = await response.text();
+              // Sanitize error message to prevent XSS - remove potentially dangerous characters
+              const sanitizedError = String(errorText).replace(/[<>\"']/g, "");
+              messageDiv.textContent = "Error: " + sanitizedError;
+            }
+          } catch (error) {
+            messageDiv.textContent = "Error: " + error.message;
+          }
+        });
+    </script>
+  </body>
+</html>
